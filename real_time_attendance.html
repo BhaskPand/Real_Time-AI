@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Real-Time AI Attendance System (Tabbed Interface)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"/>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .video-container { position: relative; width: 100%; padding-top: 75%; }
+        #video-feed {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            border-radius: 1rem;
+        }
+        #attendance-history-list::-webkit-scrollbar, #student-roster-list-content::-webkit-scrollbar { width: 8px; }
+        #attendance-history-list::-webkit-scrollbar-thumb, #student-roster-list-content::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-slate-200 min-h-screen p-4">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center py-6 bg-white shadow-xl rounded-2xl mb-8 border-b-4 border-indigo-500">
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">
+                <span class="text-indigo-600">Smart</span> Attendance System
+            </h1>
+            <p class="text-gray-500 mt-2">Refactored with navigation tabs for a cleaner, multi-view experience.</p>
+            <p class="text-xs mt-3 text-gray-400">Auth ID: <span id="user-id-display" class="font-mono text-gray-600">Loading...</span></p>
+        </header>
+
+        <main class="bg-white p-6 rounded-2xl shadow-xl border border-indigo-100">
+            
+            <!-- Navigation Tabs -->
+            <nav class="flex space-x-2 border-b border-gray-200 mb-6">
+                <button id="roster-tab-button" onclick="switchTab('roster')" 
+                    class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg transition duration-150 bg-indigo-600 text-white">
+                    1. Student Roster
+                </button>
+                <button id="live-attendance-tab-button" onclick="switchTab('live-attendance')" 
+                    class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg transition duration-150 bg-indigo-100 text-indigo-700 hover:bg-indigo-200">
+                    2. Live Attendance
+                </button>
+                <button id="history-tab-button" onclick="switchTab('history')" 
+                    class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg transition duration-150 bg-indigo-100 text-indigo-700 hover:bg-indigo-200">
+                    3. Today's History
+                </button>
+            </nav>
+
+            <!-- Status Message (Persistent) -->
+            <div id="status-message" class="mb-6 p-3 rounded-xl border text-sm font-medium bg-blue-100 text-blue-700 border-blue-300 flex items-center">
+                Initializing system... waiting for authentication.
+            </div>
+
+            <!-- Tab Content Containers -->
+
+            <!-- 1. Student Roster Tab Content (Default) -->
+            <div id="roster-content" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Registration -->
+                <div class="bg-gray-50 p-6 rounded-xl shadow-inner border border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">Register New Student</h2>
+                    <div class="space-y-3">
+                        <input type="text" id="student-name" placeholder="Student Full Name" 
+                            class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                        <input type="text" id="student-id" placeholder="Unique ID (e.g., CSEE101)" 
+                            class="w-full p-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-indigo-500 focus:border-indigo-500" />
+                        
+                        <div>
+                            <label for="student-photo" class="block text-xs font-medium text-gray-700 pb-1">Upload Student Photo (Face Signature)</label>
+                            <input type="file" id="student-photo" accept="image/*" 
+                                class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-200 file:text-indigo-800 hover:file:bg-indigo-300 cursor-pointer" />
+                        </div>
+
+                        <button id="register-student-button" class="w-full bg-indigo-700 text-white py-2 rounded-xl shadow hover:bg-indigo-800 transition text-sm font-medium">
+                            Register Student
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Roster List -->
+                <div class="p-6 rounded-xl border border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                        Registered Roster 
+                        <span class="text-sm font-medium text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full">
+                            Total: <span id="roster-count">0</span>
+                        </span>
+                    </h2>
+                    <div id="student-roster-list-content" class="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                        <p class="text-gray-500 text-center text-sm">Loading roster...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Live Attendance Tab Content (Hidden by Default) -->
+            <div id="live-attendance-content" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Camera Feed -->
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                        Camera Stream
+                        <div class="flex items-center space-x-2 text-sm font-medium">
+                            <div id="scan-status-indicator" class="w-3 h-3 rounded-full bg-gray-400"></div>
+                            <span class="text-gray-600">Scan Rate: 5s</span>
+                        </div>
+                    </h2>
+                    <div class="video-container mb-4 rounded-xl shadow-inner bg-gray-200 overflow-hidden">
+                        <video id="video-feed" playsinline class="bg-gray-800"></video>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <button id="start-scanning-button" disabled
+                            class="flex items-center justify-center px-4 py-3 text-sm font-medium rounded-xl shadow-md text-white bg-green-600 hover:bg-green-700 transition duration-150 disabled:bg-gray-400"
+                            >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" /></svg>
+                            START SCANNING
+                        </button>
+
+                        <button id="stop-camera-button" disabled
+                            class="flex items-center justify-center px-4 py-3 text-sm font-medium rounded-xl shadow-md text-white bg-red-600 hover:bg-red-700 transition duration-150 disabled:bg-gray-400"
+                            >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                            STOP CAMERA
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Snapshot Preview -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mt-6 mb-3">Last Processed Snapshot:</h3>
+                    <img id="snapshot-preview" src="https://placehold.co/400x300/e0e0e0/555555?text=Snapshot+Preview"
+                         class="w-full max-h-96 object-contain rounded-lg border border-gray-300 shadow-inner" alt="Last Captured Snapshot"/>
+                    <canvas id="capture-canvas" style="display: none;"></canvas>
+                </div>
+            </div>
+
+            <!-- 3. Attendance History Tab Content (Hidden by Default) -->
+            <div id="history-content" class="hidden">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Today's Attendance History</h2>
+                <p class="text-sm text-gray-500 mb-4">Real-time Check-In/Check-Out Records for the current day.</p>
+                <div id="attendance-history-list" class="space-y-4 max-h-[500px] overflow-y-auto p-2 border rounded-xl bg-gray-50">
+                    <p class="text-gray-500 p-4 text-center">Loading records...</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODULE: Full Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, onSnapshot, setDoc, doc, serverTimestamp, setLogLevel, addDoc, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --------------- CONFIGURATION ---------------
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'demo-attendance-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const API_KEY = "";
+
+        // --------- Gemini Schema -----------
+        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=";
+        const ATTENDANCE_SCHEMA = {
+            type: "OBJECT",
+            properties: {
+                "detectedCount": { "type": "INTEGER", "description": "The number of unique people detected in the image." }
+            },
+            required: ["detectedCount"]
+        };
+
+        // --------------- GLOBALS ---------------
+        let db, auth;
+        let userId = null;
+        let isAuthReady = false;
+        let videoStream = null;
+        let studentRoster = [];
+        let currentDailyAttendance = []; 
+        let scanInterval = null;
+        let isScanning = false;
+        const SCAN_RATE_MS = 5000;
+        const ATTENDANCE_COLLECTION = `artifacts/${appId}/public/data/daily_attendance`;
+        const ROSTER_COLLECTION = `artifacts/${appId}/public/data/student_roster`;
+
+        // ----------- Utility Functions ------------
+        
+        function getTodayDateString() {
+            const now = new Date();
+            return now.toISOString().split('T')[0];
+        }
+
+        function calculateStayTime(checkInTime, checkOutTime) {
+            if (!checkInTime || !checkOutTime) return { display: 'N/A', minutes: 0 };
+            
+            const inTime = checkInTime.toDate ? checkInTime.toDate() : new Date(checkInTime);
+            const outTime = checkOutTime.toDate ? checkOutTime.toDate() : new Date(checkOutTime);
+            
+            const diffMs = outTime.getTime() - inTime.getTime();
+            const diffMinutes = Math.floor(diffMs / 60000);
+            
+            const hours = Math.floor(diffMinutes / 60);
+            const minutes = diffMinutes % 60;
+            
+            return {
+                display: `${hours}h ${minutes}m`,
+                minutes: diffMinutes
+            };
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function selectRandomStudents(roster, count) {
+            if (count === 0 || roster.length === 0) return [];
+            const actualCount = Math.min(count, roster.length);
+            const shuffledRoster = [...roster];
+            for (let i = shuffledRoster.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledRoster[i], shuffledRoster[j]] = [shuffledRoster[j], shuffledRoster[i]];
+            }
+            return shuffledRoster.slice(0, actualCount);
+        }
+
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) throw new Error(`API request failed after ${maxRetries} attempts: ${error.message}`);
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 500;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status-message');
+            statusEl.className = 'mb-6 p-3 rounded-xl border text-sm font-medium transition duration-300 flex items-center';
+
+            let iconHtml;
+            switch (type) {
+                case 'success':
+                    statusEl.classList.add('bg-green-100', 'text-green-700', 'border-green-300');
+                    iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>';
+                    break;
+                case 'error':
+                    statusEl.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
+                    iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>';
+                    break;
+                case 'warning':
+                    statusEl.classList.add('bg-yellow-100', 'text-yellow-700', 'border-yellow-300');
+                    iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.32a1 1 0 00.903-.186l7-4a1 1 0 10-.714-1.748L8.257 7.32zM10 18a8 8 0 100-16 8 8 0 000 16zm-1-7a1 1 0 112 0v4a1 1 0 11-2 0v-4z" clip-rule="evenodd" /></svg>';
+                    break;
+                default:
+                    statusEl.classList.add('bg-blue-100', 'text-blue-700', 'border-blue-300');
+                    iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0v-4a1 1 0 112 0v4zm-2-9a1 1 0 102 0 1 1 0 00-2 0z" clip-rule="evenodd" /></svg>';
+            }
+            statusEl.innerHTML = iconHtml + message;
+        }
+
+        // --- Tab Management ---
+
+        function switchTab(tabName) {
+            // 1. Manage Camera/Scanning state
+            if (tabName !== 'live-attendance') {
+                stopContinuousScanning(); // Stops the interval
+                // We keep the camera active if it was on, but stop scanning. stopCamera is manual.
+            }
+
+            // 2. Manage UI visibility and button styles
+            const tabs = ['roster', 'live-attendance', 'history'];
+            tabs.forEach(tab => {
+                const content = document.getElementById(`${tab}-content`);
+                const button = document.getElementById(`${tab}-tab-button`);
+                if (tab === tabName) {
+                    content.classList.remove('hidden');
+                    button.classList.remove('bg-indigo-100', 'text-indigo-700', 'hover:bg-indigo-200');
+                    button.classList.add('bg-indigo-600', 'text-white');
+                } else {
+                    content.classList.add('hidden');
+                    button.classList.remove('bg-indigo-600', 'text-white');
+                    button.classList.add('bg-indigo-100', 'text-indigo-700', 'hover:bg-indigo-200');
+                }
+            });
+
+            // 3. Special action for the Live Attendance tab
+            if (tabName === 'live-attendance') {
+                if (!videoStream) {
+                    startCamera(); // Starts the camera feed (but not scanning yet)
+                }
+            }
+        }
+
+        // --- Scanning Control ---
+
+        function startContinuousScanning() {
+            if (isScanning) return;
+            if (studentRoster.length === 0) {
+                 updateStatus('Roster is empty. Please register students before starting the scan.', 'error');
+                 return;
+            }
+
+            isScanning = true;
+            document.getElementById('start-scanning-button').disabled = true;
+            document.getElementById('stop-camera-button').disabled = false;
+            
+            runAttendanceScan();
+            scanInterval = setInterval(runAttendanceScan, SCAN_RATE_MS);
+            updateStatus(`Continuous scanning started! Analyzing for Check-In/Out every ${SCAN_RATE_MS / 1000} seconds...`, 'info');
+        }
+
+        function stopContinuousScanning() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+            isScanning = false;
+            document.getElementById('start-scanning-button').disabled = false;
+            document.getElementById('stop-camera-button').disabled = false; // Remains enabled to stop camera
+            updateStatus('Continuous scanning paused. Click START SCANNING to resume.', 'warning');
+        }
+
+
+        // --- Camera Management ---
+
+        function startCamera() {
+            const video = document.getElementById('video-feed');
+            updateStatus('Requesting camera access...');
+            
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                .then(stream => {
+                    videoStream = stream;
+                    video.srcObject = stream;
+                    video.play();
+                    // Camera is active, enable scanning
+                    document.getElementById('start-scanning-button').disabled = false;
+                    document.getElementById('stop-camera-button').disabled = false;
+                    updateStatus('Camera active. Click START SCANNING to begin attendance logging.', 'info');
+                })
+                .catch(err => {
+                    console.error("Camera access failed:", err);
+                    updateStatus(`Error: Camera access denied or not available. ${err.name}`, 'error');
+                });
+        }
+
+        function stopCamera() {
+            stopContinuousScanning();
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+                document.getElementById('video-feed').srcObject = null;
+                
+                // Disable all controls
+                document.getElementById('start-scanning-button').disabled = true;
+                document.getElementById('stop-camera-button').disabled = true;
+                
+                updateStatus('Camera turned off. System is idle.', 'warning');
+            }
+        }
+
+        // --- Core Application Logic (Scan, AI, Save) ---
+
+        function captureFrame() {
+            const video = document.getElementById('video-feed');
+            const canvas = document.getElementById('capture-canvas');
+            const context = canvas.getContext('2d');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            context.setTransform(1, 0, 0, 1, 0, 0);
+
+            const base64Url = canvas.toDataURL('image/jpeg', 0.8);
+            const base64Data = base64Url.split(',')[1];
+            const mimeType = 'image/jpeg';
+            
+            document.getElementById('snapshot-preview').src = base64Url;
+
+            return { base64Data, mimeType };
+        }
+
+        async function getDetectedCount(base64Data, mimeType) {
+            const payload = {
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            { text: "Count the number of people in this image." },
+                            { inlineData: { mimeType: mimeType, data: base64Data } }
+                        ]
+                    }
+                ],
+                systemInstruction: { parts: [{ text: "You are a People Counting AI. Return only the number of people in JSON." }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: ATTENDANCE_SCHEMA
+                }
+            };
+
+            const url = API_URL + API_KEY;
+            try {
+                const response = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (jsonText) {
+                    const data = JSON.parse(jsonText);
+                    return data.detectedCount || 0;
+                }
+                return 0;
+            } catch (error) {
+                // Do not update main status on API error during scan, as it happens too often. Log instead.
+                console.error("Gemini API call failed during scan:", error);
+                return 0;
+            }
+        }
+
+        async function runAttendanceScan() {
+            if (!isAuthReady || !userId || !videoStream || studentRoster.length === 0) {
+                // Stop the scan if critical dependencies are missing
+                stopContinuousScanning();
+                return;
+            }
+
+            const scanStatusEl = document.getElementById('scan-status-indicator');
+            scanStatusEl.classList.remove('bg-green-500', 'bg-red-500');
+            scanStatusEl.classList.add('bg-yellow-500');
+            
+            console.log('Scanning frame...');
+
+            try {
+                // 1. Capture Frame and get count
+                const { base64Data, mimeType } = captureFrame();
+                const detectedCount = await getDetectedCount(base64Data, mimeType);
+                
+                if (detectedCount === 0) {
+                     scanStatusEl.classList.remove('bg-yellow-500');
+                     scanStatusEl.classList.add('bg-red-500');
+                     return;
+                }
+                
+                // 2. Simulate Recognition & Log Check-In/Out
+                const detectedStudents = selectRandomStudents(studentRoster, detectedCount);
+                
+                const today = getTodayDateString();
+                let logMessage = '';
+                let successCount = 0;
+
+                for (const student of detectedStudents) {
+                    // Find today's existing record for this student
+                    const studentAttendance = currentDailyAttendance.find(
+                        record => record.studentId === student.studentId
+                    );
+                    
+                    const now = serverTimestamp();
+
+                    if (!studentAttendance) {
+                        // --- CHECK-IN LOGIC ---
+                        const recordRef = doc(collection(db, ATTENDANCE_COLLECTION));
+                        await setDoc(recordRef, {
+                            studentId: student.studentId,
+                            name: student.name,
+                            dateString: today,
+                            checkInTime: now,
+                            checkOutTime: null,
+                            stayTimeMinutes: null,
+                            lastUpdate: now
+                        });
+                        logMessage += `${student.name} checked in. `;
+                        successCount++;
+
+                    } else if (studentAttendance.checkInTime && !studentAttendance.checkOutTime) {
+                        // --- CHECK-OUT LOGIC ---
+                        const stay = calculateStayTime(studentAttendance.checkInTime, new Date());
+                        const recordRef = doc(db, ATTENDANCE_COLLECTION, studentAttendance.id);
+                        
+                        await updateDoc(recordRef, {
+                            checkOutTime: now,
+                            stayTimeMinutes: stay.minutes,
+                            lastUpdate: now
+                        });
+                        logMessage += `${student.name} checked out. `;
+                        successCount++;
+
+                    } 
+                    // Else: Already completed Check-In/Out for today.
+                }
+
+                if (successCount > 0) {
+                    updateStatus(`Scan logged! ${successCount} Check-In/Out events.`, 'success');
+                } else {
+                    updateStatus(`Scan complete. ${detectedCount} detected. No new Check-In/Out needed.`, 'info');
+                }
+                
+                scanStatusEl.classList.remove('bg-yellow-500', 'bg-red-500');
+                scanStatusEl.classList.add('bg-green-500');
+
+            } catch (error) {
+                console.error("Attendance scan failed:", error);
+                scanStatusEl.classList.remove('bg-yellow-500');
+                scanStatusEl.classList.add('bg-red-500');
+            }
+        }
+        
+        // --- Student Roster Management ---
+
+        async function registerStudent() {
+            const nameInput = document.getElementById('student-name');
+            const idInput = document.getElementById('student-id');
+            const photoInput = document.getElementById('student-photo');
+            const name = nameInput.value.trim();
+            const studentId = idInput.value.trim();
+            const photoFile = photoInput.files[0];
+            if (!name || !studentId || !photoFile || !isAuthReady || !db) {
+                updateStatus('Name, ID, and Photo are required, and system must be authenticated.', 'warning');
+                return;
+            }
+            try {
+                if (studentRoster.some(s => s.studentId === studentId)) {
+                    updateStatus(`Student ID ${studentId} is already registered.`, 'warning');
+                    return;
+                }
+                const photoBase64 = await fileToBase64(photoFile);
+                const rosterRef = collection(db, ROSTER_COLLECTION);
+                await addDoc(rosterRef, {
+                    name: name,
+                    studentId: studentId,
+                    faceSignatureSnippet: photoBase64.substring(0, 50) + '...',
+                    registeredBy: userId,
+                    createdAt: serverTimestamp()
+                });
+                nameInput.value = '';
+                idInput.value = '';
+                photoInput.value = '';
+                updateStatus(`${name} (ID: ${studentId}) registered successfully!`, 'success');
+            } catch (error) {
+                updateStatus(`Registration failed: ${error.message}`, 'error');
+            }
+        }
+
+        // --- Firebase Initialization and Auth ---
+        
+        function initFirebase() {
+            if (!firebaseConfig || !firebaseConfig.apiKey) {
+                console.error("Firebase configuration is missing or invalid.");
+            }
+            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js")
+                .then(module => {
+                    const { initializeApp } = module;
+                    const app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    setLogLevel('Debug');
+                    setupAuthListener();
+                })
+                .catch(e => {
+                    console.error("Failed to load Firebase libraries:", e);
+                    updateStatus("FATAL: Failed to load Firebase dependencies.", 'error');
+                });
+        }
+
+        function setupAuthListener() {
+            onAuthStateChanged(auth, async (user) => {
+                if (!user) {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                        userId = auth.currentUser.uid;
+                    } catch (error) {
+                        console.error("Authentication failed, falling back to random ID:", error);
+                        userId = crypto.randomUUID(); 
+                    }
+                } else {
+                    userId = user.uid;
+                }
+                isAuthReady = true;
+                setupRosterListener();
+                setupHistoryListener();
+                document.getElementById('user-id-display').textContent = userId;
+                // Default to the roster tab
+                switchTab('roster'); 
+            });
+        }
+
+        // --- Firestore Listeners ---
+
+        function setupRosterListener() {
+            if (!db || !isAuthReady) return;
+            const rosterRef = collection(db, ROSTER_COLLECTION);
+            onSnapshot(rosterRef, (snapshot) => {
+                studentRoster = [];
+                snapshot.forEach((doc) => studentRoster.push({ id: doc.id, ...doc.data() }));
+                studentRoster.sort((a, b) => a.studentId.localeCompare(b.studentId));
+                renderRoster(studentRoster);
+            }, (error) => {
+                updateStatus("Error loading roster: " + error.message, 'error');
+            });
+        }
+
+        function renderRoster(roster) {
+            const rosterList = document.getElementById('student-roster-list-content');
+            rosterList.innerHTML = '';
+            if (roster.length === 0) {
+                rosterList.innerHTML = `<p class="text-gray-500 p-4 text-center border border-dashed rounded-xl">No students registered yet.</p>`;
+                return;
+            }
+            roster.forEach(student => {
+                const item = document.createElement('div');
+                item.className = 'bg-indigo-50 p-3 rounded-lg flex justify-between items-center';
+                item.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-indigo-800">${student.name}</p>
+                        <p class="text-xs text-indigo-600 font-mono">ID: ${student.studentId}</p>
+                    </div>
+                    <span class="text-xs text-gray-500">Reg: ${student.createdAt ? new Date(student.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}</span>
+                `;
+                rosterList.appendChild(item);
+            });
+            document.getElementById('roster-count').textContent = roster.length;
+        }
+
+        function setupHistoryListener() {
+            if (!db || !isAuthReady) return;
+
+            const today = getTodayDateString();
+            const historyRef = collection(db, ATTENDANCE_COLLECTION);
+            const q = query(historyRef, where('dateString', '==', today));
+
+            onSnapshot(q, (snapshot) => {
+                const history = [];
+                currentDailyAttendance = [];
+                snapshot.forEach((doc) => {
+                    const data = { id: doc.id, ...doc.data() };
+                    history.push(data);
+                    currentDailyAttendance.push(data);
+                });
+
+                history.sort((a, b) => (b.checkInTime?.seconds || 0) - (a.checkInTime?.seconds || 0));
+                renderHistory(history);
+            }, (error) => {
+                updateStatus("Error loading attendance history: " + error.message, 'error');
+            });
+        }
+
+        function renderHistory(history) {
+            const historyList = document.getElementById('attendance-history-list');
+            historyList.innerHTML = '';
+            if (history.length === 0) {
+                historyList.innerHTML = `<p class="text-gray-500 p-4 text-center">No attendance records today.</p>`;
+                return;
+            }
+
+            history.forEach(record => {
+                const inTime = record.checkInTime ? new Date(record.checkInTime.seconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                let outTime = record.checkOutTime ? new Date(record.checkOutTime.seconds * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '---';
+                
+                let statusClass = 'text-green-600 bg-green-100';
+                let stayTimeDisplay = '';
+
+                if (record.checkOutTime) {
+                    const stay = calculateStayTime(record.checkInTime, record.checkOutTime);
+                    stayTimeDisplay = `(${stay.display})`;
+                }
+
+                let statusText = `CHECKED OUT ${stayTimeDisplay}`;
+
+                if (!record.checkOutTime) {
+                    statusClass = 'text-red-600 bg-red-100 animate-pulse';
+                    statusText = 'CHECKED IN';
+                    outTime = '---';
+                }
+
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 border border-gray-200 rounded-xl shadow-sm';
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <p class="text-lg font-bold text-gray-900">${record.name} (${record.studentId})</p>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                        <p><span class="font-medium text-gray-500">In:</span> ${inTime}</p>
+                        <p><span class="font-medium text-gray-500">Out:</span> ${outTime}</p>
+                    </div>
+                `;
+                historyList.appendChild(card);
+            });
+        }
+
+        // -------- Launch --------------
+        document.addEventListener('DOMContentLoaded', () => {
+            // Attach global functions to window scope for HTML onclicks
+            window.switchTab = switchTab;
+            window.stopCamera = stopCamera;
+            
+            initFirebase();
+            
+            // Attach event listeners for buttons
+            document.getElementById('start-scanning-button').addEventListener('click', startContinuousScanning);
+            document.getElementById('stop-camera-button').addEventListener('click', stopCamera);
+            document.getElementById('register-student-button').addEventListener('click', registerStudent);
+        });
+    </script>
+</body>
+</html>
